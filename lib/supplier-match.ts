@@ -1,5 +1,5 @@
 export interface SupplierRecord {
-  id: number;
+  id: string;
   name: string;
   aliases: string[];
 }

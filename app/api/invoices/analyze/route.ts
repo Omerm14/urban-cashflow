@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put } from "@vercel/blob";
-import { extractInvoiceFromUrl } from "@/lib/claude";
-import { sql } from "@/lib/db";
+import { extractInvoiceFromBase64 } from "@/lib/claude";
+import { getSuppliers } from "@/lib/store";
 import { matchSupplier } from "@/lib/supplier-match";
 
 export async function POST(req: NextRequest) {
@@ -9,26 +8,23 @@ export async function POST(req: NextRequest) {
   const file = formData.get("file") as File | null;
   if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
 
-  // Upload to Vercel Blob
-  const blob = await put(`invoices/${Date.now()}-${file.name}`, file, {
-    access: "public",
-  });
+  const mediaType = (file.type || "image/jpeg") as
+    | "image/jpeg"
+    | "image/png"
+    | "image/gif"
+    | "image/webp";
 
-  // Run OCR
-  const extracted = await extractInvoiceFromUrl(blob.url);
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const base64 = buffer.toString("base64");
 
-  // Try to match supplier
-  const { rows: suppliers } = await sql`SELECT id, name, aliases FROM suppliers`;
+  const extracted = await extractInvoiceFromBase64(base64, mediaType);
+
+  const suppliers = await getSuppliers();
   const match = extracted.supplier_name
-    ? matchSupplier(extracted.supplier_name, suppliers.map((s) => ({
-        id: s.id,
-        name: s.name,
-        aliases: s.aliases ?? [],
-      })))
+    ? matchSupplier(extracted.supplier_name, suppliers)
     : null;
 
   return NextResponse.json({
-    image_url: blob.url,
     extracted,
     matched_supplier: match
       ? { id: match.supplier.id, name: match.supplier.name, score: match.score }

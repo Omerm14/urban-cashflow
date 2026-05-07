@@ -7,7 +7,6 @@ export interface PaymentRow {
   currency: string;
   invoice_date: string | null;
   invoice_number: string | null;
-  image_url: string | null;
   payment_month: string;
   overridden_due_date: string | null;
   override_reason: string | null;
@@ -32,13 +31,12 @@ export function buildPaymentsWorkbook(payments: PaymentRow[]): Buffer {
     summaryRows.push([month, total]);
 
     const sheetData = [
-      ["ספק", "סכום (₪)", "תאריך חשבונית", "מספר חשבונית", "קישור לחשבונית", "הערת אישור"],
+      ["ספק", "סכום (₪)", "תאריך חשבונית", "מספר חשבונית", "הערת אישור"],
       ...rows.map((r) => [
         r.supplier_name,
         r.amount,
         r.invoice_date ? formatDate(r.invoice_date) : "",
         r.invoice_number ?? "",
-        r.image_url ?? "",
         r.override_reason ?? "",
       ]),
       [],
@@ -47,16 +45,8 @@ export function buildPaymentsWorkbook(payments: PaymentRow[]): Buffer {
 
     const ws = XLSX.utils.aoa_to_sheet(sheetData);
     ws["!cols"] = [
-      { wch: 25 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 40 }, { wch: 30 },
+      { wch: 25 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 30 },
     ];
-
-    // Hyperlinks for image URLs
-    rows.forEach((r, i) => {
-      if (r.image_url) {
-        const cellRef = XLSX.utils.encode_cell({ r: i + 1, c: 4 });
-        ws[cellRef] = { v: r.image_url, l: { Target: r.image_url } };
-      }
-    });
 
     XLSX.utils.book_append_sheet(wb, ws, month);
   }

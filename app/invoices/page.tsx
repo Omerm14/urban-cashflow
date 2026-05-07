@@ -1,24 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Upload, Eye, Trash2 } from "lucide-react";
+import { Upload, Trash2 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import InvoiceReviewModal from "@/components/InvoiceReviewModal";
 
 interface Invoice {
-  id: number;
+  id: string;
   supplier_name: string | null;
   invoice_number: string | null;
   invoice_date: string | null;
   amount: number | null;
   currency: string;
   status: "pending_review" | "confirmed" | "processed";
-  image_url: string | null;
   created_at: string;
 }
 
 interface AnalyzeResult {
-  image_url: string;
   extracted: {
     supplier_name: string | null;
     invoice_number: string | null;
@@ -27,7 +25,7 @@ interface AnalyzeResult {
     currency: string;
     description: string | null;
   };
-  matched_supplier: { id: number; name: string; score: number } | null;
+  matched_supplier: { id: string; name: string; score: number } | null;
 }
 
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
@@ -41,6 +39,7 @@ export default function InvoicesPage() {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [reviewData, setReviewData] = useState<AnalyzeResult | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | undefined>();
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function load() {
@@ -50,22 +49,38 @@ export default function InvoicesPage() {
 
   useEffect(() => { load(); }, []);
 
+  function releasePreview() {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(undefined);
+    }
+  }
+
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
+    const file = files[0];
     setUploading(true);
+
+    const localUrl = file.type.startsWith("image/")
+      ? URL.createObjectURL(file)
+      : undefined;
+
     try {
       const fd = new FormData();
-      fd.append("file", files[0]);
+      fd.append("file", file);
       const res = await fetch("/api/invoices/analyze", { method: "POST", body: fd });
       const data: AnalyzeResult = await res.json();
+      setPreviewUrl(localUrl);
       setReviewData(data);
+    } catch {
+      if (localUrl) URL.revokeObjectURL(localUrl);
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
     }
   }
 
-  async function deleteInvoice(id: number) {
+  async function deleteInvoice(id: string) {
     if (!confirm("Delete this invoice?")) return;
     await fetch(`/api/invoices/${id}`, { method: "DELETE" });
     load();
@@ -78,8 +93,13 @@ export default function InvoicesPage() {
         <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 cursor-pointer">
           <Upload size={16} />
           {uploading ? "Analyzing…" : "Upload Invoice"}
-          <input ref={fileRef} type="file" accept="image/*,.pdf" className="hidden"
-            onChange={(e) => handleFiles(e.target.files)} />
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*,.pdf"
+            className="hidden"
+            onChange={(e) => handleFiles(e.target.files)}
+          />
         </label>
       </div>
 
@@ -118,23 +138,37 @@ export default function InvoicesPage() {
           </thead>
           <tbody>
             {invoices.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">No invoices yet.</td></tr>
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                  No invoices yet.
+                </td>
+              </tr>
             ) : invoices.map((inv) => {
               const badge = STATUS_LABELS[inv.status] ?? STATUS_LABELS.pending_review;
               return (
                 <tr key={inv.id} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-800">{inv.supplier_name ?? <span className="text-amber-600 italic">Unknown</span>}</td>
+                  <td className="px-4 py-3 font-medium text-slate-800">
+                    {inv.supplier_name ?? <span className="text-amber-600 italic">Unknown</span>}
+                  </td>
                   <td className="px-4 py-3 text-slate-500">{inv.invoice_number ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-500">{inv.invoice_date ? formatDate(inv.invoice_date) : "—"}</td>
-                  <td className="px-4 py-3 text-slate-700">{inv.amount ? formatCurrency(Number(inv.amount), inv.currency) : "—"}</td>
+                  <td className="px-4 py-3 text-slate-500">
+                    {inv.invoice_date ? formatDate(inv.invoice_date) : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-slate-700">
+                    {inv.amount ? formatCurrency(Number(inv.amount), inv.currency) : "—"}
+                  </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${badge.className}`}>{badge.label}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${badge.className}`}>
+                      {badge.label}
+                    </span>
                   </td>
                   <td className="px-4 py-3 flex gap-2 justify-end">
-                    {inv.image_url && (
-                      <a href={`/invoices/${inv.id}`} className="text-slate-400 hover:text-blue-600"><Eye size={15} /></a>
-                    )}
-                    <button onClick={() => deleteInvoice(inv.id)} className="text-slate-400 hover:text-red-600"><Trash2 size={15} /></button>
+                    <button
+                      onClick={() => deleteInvoice(inv.id)}
+                      className="text-slate-400 hover:text-red-600"
+                    >
+                      <Trash2 size={15} />
+                    </button>
                   </td>
                 </tr>
               );
@@ -146,8 +180,9 @@ export default function InvoicesPage() {
       {reviewData && (
         <InvoiceReviewModal
           data={reviewData}
-          onClose={() => setReviewData(null)}
-          onSaved={() => { setReviewData(null); load(); }}
+          previewUrl={previewUrl}
+          onClose={() => { releasePreview(); setReviewData(null); }}
+          onSaved={() => { releasePreview(); setReviewData(null); load(); }}
         />
       )}
     </div>

@@ -7,13 +7,12 @@ import ExportButton from "@/components/ExportButton";
 import PaymentRow from "@/components/PaymentRow";
 
 interface Payment {
-  id: number;
+  id: string;
   supplier_name: string;
   amount: number;
   currency: string;
   invoice_date: string | null;
   invoice_number: string | null;
-  image_url: string | null;
   payment_month: string;
   calculated_due_date: string;
   overridden_due_date: string | null;
@@ -22,12 +21,11 @@ interface Payment {
 }
 
 interface Invoice {
-  id: number;
+  id: string;
   supplier_name: string | null;
   amount: number | null;
   status: string;
   created_at: string;
-  image_url: string | null;
 }
 
 export default function DashboardPage() {

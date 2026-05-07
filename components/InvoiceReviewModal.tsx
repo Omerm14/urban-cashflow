@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { X, Check } from "lucide-react";
 
 interface AnalyzeResult {
-  image_url: string;
   extracted: {
     supplier_name: string | null;
     invoice_number: string | null;
@@ -13,11 +12,11 @@ interface AnalyzeResult {
     currency: string;
     description: string | null;
   };
-  matched_supplier: { id: number; name: string; score: number } | null;
+  matched_supplier: { id: string; name: string; score: number } | null;
 }
 
 interface Supplier {
-  id: number;
+  id: string;
   name: string;
   payment_term_type: string;
   payment_term_days: number | null;
@@ -25,15 +24,17 @@ interface Supplier {
 
 export default function InvoiceReviewModal({
   data,
+  previewUrl,
   onClose,
   onSaved,
 }: {
   data: AnalyzeResult;
+  previewUrl?: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [supplierId, setSupplierId] = useState<number | "">(data.matched_supplier?.id ?? "");
+  const [supplierId, setSupplierId] = useState<string>(data.matched_supplier?.id ?? "");
   const [invoiceNumber, setInvoiceNumber] = useState(data.extracted.invoice_number ?? "");
   const [invoiceDate, setInvoiceDate] = useState(data.extracted.invoice_date ?? "");
   const [amount, setAmount] = useState(String(data.extracted.total_amount ?? ""));
@@ -47,7 +48,6 @@ export default function InvoiceReviewModal({
 
   async function save(status: "pending_review" | "confirmed") {
     setSaving(true);
-    // First create the invoice
     const createRes = await fetch("/api/invoices", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -58,13 +58,11 @@ export default function InvoiceReviewModal({
         amount: amount ? Number(amount) : null,
         currency,
         description: description || null,
-        image_url: data.image_url,
         status: "pending_review",
       }),
     });
     const invoice = await createRes.json();
 
-    // If confirming immediately, PATCH to confirmed to trigger payment creation
     if (status === "confirmed" && supplierId && invoiceDate && amount) {
       await fetch("/api/invoices", {
         method: "PATCH",
@@ -100,14 +98,25 @@ export default function InvoiceReviewModal({
           {/* Preview */}
           <div>
             <p className="text-xs text-slate-500 font-medium mb-2">Invoice Preview</p>
-            <img src={data.image_url} alt="Invoice" className="w-full rounded-lg border border-slate-200 object-contain max-h-64" />
+            {previewUrl ? (
+              <img
+                src={previewUrl}
+                alt="Invoice"
+                className="w-full rounded-lg border border-slate-200 object-contain max-h-64"
+              />
+            ) : (
+              <div className="w-full h-32 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 text-sm">
+                No preview
+              </div>
+            )}
           </div>
 
           {/* Fields */}
           <div className="space-y-3">
             <div>
               <label className="text-xs text-slate-500 font-medium block mb-1">
-                Supplier {data.matched_supplier && (
+                Supplier{" "}
+                {data.matched_supplier && (
                   <span className="text-green-600 ml-1">
                     (auto-matched: {Math.round(data.matched_supplier.score * 100)}%)
                   </span>
@@ -116,7 +125,7 @@ export default function InvoiceReviewModal({
               <select
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
                 value={supplierId}
-                onChange={(e) => setSupplierId(e.target.value ? Number(e.target.value) : "")}
+                onChange={(e) => setSupplierId(e.target.value)}
               >
                 <option value="">— Select supplier —</option>
                 {suppliers.map((s) => (
@@ -125,7 +134,8 @@ export default function InvoiceReviewModal({
               </select>
               {selectedSupplier && (
                 <p className="text-xs text-blue-600 mt-1">
-                  Terms: {selectedSupplier.payment_term_type === "shotef_plus"
+                  Terms:{" "}
+                  {selectedSupplier.payment_term_type === "shotef_plus"
                     ? `ש+${selectedSupplier.payment_term_days}`
                     : selectedSupplier.payment_term_type}
                 </p>
@@ -139,24 +149,38 @@ export default function InvoiceReviewModal({
             </div>
             <div>
               <label className="text-xs text-slate-500 font-medium block mb-1">Invoice Number</label>
-              <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
+              <input
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                value={invoiceNumber}
+                onChange={(e) => setInvoiceNumber(e.target.value)}
+              />
             </div>
             <div>
               <label className="text-xs text-slate-500 font-medium block mb-1">Invoice Date</label>
-              <input type="date" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+              <input
+                type="date"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                value={invoiceDate}
+                onChange={(e) => setInvoiceDate(e.target.value)}
+              />
             </div>
             <div className="flex gap-2">
               <div className="flex-1">
                 <label className="text-xs text-slate-500 font-medium block mb-1">Amount</label>
-                <input type="number" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                  value={amount} onChange={(e) => setAmount(e.target.value)} />
+                <input
+                  type="number"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                />
               </div>
               <div className="w-24">
                 <label className="text-xs text-slate-500 font-medium block mb-1">Currency</label>
-                <select className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                  value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                <select
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                >
                   <option value="ILS">ILS ₪</option>
                   <option value="USD">USD $</option>
                   <option value="EUR">EUR €</option>
@@ -165,8 +189,11 @@ export default function InvoiceReviewModal({
             </div>
             <div>
               <label className="text-xs text-slate-500 font-medium block mb-1">Description</label>
-              <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                value={description} onChange={(e) => setDescription(e.target.value)} />
+              <input
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
             </div>
           </div>
         </div>
@@ -186,7 +213,10 @@ export default function InvoiceReviewModal({
           >
             Save for Later
           </button>
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-500 hover:text-slate-700 ml-auto">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm text-slate-500 hover:text-slate-700 ml-auto"
+          >
             Cancel
           </button>
         </div>

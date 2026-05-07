@@ -1,29 +1,35 @@
 import { NextResponse } from "next/server";
-import { sql } from "@/lib/db";
+import { getInvoices, getPayments, getSuppliers } from "@/lib/store";
 import { buildPaymentsWorkbook } from "@/lib/excel";
 
 export async function GET() {
-  const { rows } = await sql`
-    SELECT p.payment_month, p.amount, p.overridden_due_date, p.override_reason,
-           s.name AS supplier_name,
-           i.invoice_date, i.invoice_number, i.image_url, i.currency
-    FROM payments p
-    JOIN suppliers s ON p.supplier_id = s.id
-    JOIN invoices i ON p.invoice_id = i.id
-    ORDER BY p.payment_month, COALESCE(p.overridden_due_date, p.calculated_due_date)
-  `;
+  const [payments, invoices, suppliers] = await Promise.all([
+    getPayments(),
+    getInvoices(),
+    getSuppliers(),
+  ]);
 
-  const buf = buildPaymentsWorkbook(rows.map((r) => ({
-    supplier_name: r.supplier_name,
-    amount: Number(r.amount),
-    currency: r.currency ?? "ILS",
-    invoice_date: r.invoice_date,
-    invoice_number: r.invoice_number,
-    image_url: r.image_url,
-    payment_month: r.payment_month,
-    overridden_due_date: r.overridden_due_date,
-    override_reason: r.override_reason,
-  })));
+  const invoiceMap = Object.fromEntries(invoices.map((i) => [i.id, i]));
+  const supplierMap = Object.fromEntries(suppliers.map((s) => [s.id, s]));
+
+  const rows = payments
+    .sort((a, b) => {
+      const da = a.overridden_due_date ?? a.calculated_due_date;
+      const db = b.overridden_due_date ?? b.calculated_due_date;
+      return a.payment_month.localeCompare(b.payment_month) || da.localeCompare(db);
+    })
+    .map((p) => ({
+      supplier_name: supplierMap[p.supplier_id]?.name ?? "Unknown",
+      amount: Number(p.amount),
+      currency: invoiceMap[p.invoice_id]?.currency ?? "ILS",
+      invoice_date: invoiceMap[p.invoice_id]?.invoice_date ?? null,
+      invoice_number: invoiceMap[p.invoice_id]?.invoice_number ?? null,
+      payment_month: p.payment_month,
+      overridden_due_date: p.overridden_due_date,
+      override_reason: p.override_reason,
+    }));
+
+  const buf = buildPaymentsWorkbook(rows);
 
   return new NextResponse(new Uint8Array(buf), {
     headers: {

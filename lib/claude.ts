@@ -5,7 +5,7 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 export interface ExtractedInvoice {
   supplier_name: string | null;
   invoice_number: string | null;
-  invoice_date: string | null; // ISO date YYYY-MM-DD
+  invoice_date: string | null;
   total_amount: number | null;
   currency: string;
   description: string | null;
@@ -24,37 +24,15 @@ Extract the following fields and return ONLY a valid JSON object with no markdow
 
 If a field is not found, use null. For currency, default to "ILS" if not specified.`;
 
-export async function extractInvoiceFromUrl(imageUrl: string): Promise<ExtractedInvoice> {
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "image", source: { type: "url", url: imageUrl } },
-          { type: "text", text: "Extract the invoice data from this image." },
-        ],
-      },
-    ],
-  });
-
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
-  try {
-    return JSON.parse(text) as ExtractedInvoice;
-  } catch {
-    return {
-      supplier_name: null,
-      invoice_number: null,
-      invoice_date: null,
-      total_amount: null,
-      currency: "ILS",
-      description: null,
-      line_items: [],
-    };
-  }
-}
+const FALLBACK: ExtractedInvoice = {
+  supplier_name: null,
+  invoice_number: null,
+  invoice_date: null,
+  total_amount: null,
+  currency: "ILS",
+  description: null,
+  line_items: [],
+};
 
 export async function extractInvoiceFromBase64(
   base64: string,
@@ -79,14 +57,6 @@ export async function extractInvoiceFromBase64(
   try {
     return JSON.parse(text) as ExtractedInvoice;
   } catch {
-    return {
-      supplier_name: null,
-      invoice_number: null,
-      invoice_date: null,
-      total_amount: null,
-      currency: "ILS",
-      description: null,
-      line_items: [],
-    };
+    return FALLBACK;
   }
 }

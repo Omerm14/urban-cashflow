@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
-import { sql } from "@/lib/db";
+import { createSupplier, getSuppliers } from "@/lib/store";
 
 interface SupplierRow {
   name?: string;
@@ -33,24 +33,28 @@ export async function POST(req: NextRequest) {
     rows = XLSX.utils.sheet_to_json<SupplierRow>(ws);
   }
 
-  const inserted: unknown[] = [];
+  const existing = await getSuppliers();
+  const existingNames = new Set(existing.map((s) => s.name.toLowerCase()));
+
+  let inserted = 0;
   for (const row of rows) {
     if (!row.name) continue;
+    if (existingNames.has(row.name.toLowerCase())) continue;
     const aliases = row.aliases
       ? row.aliases.split(";").map((a) => a.trim()).filter(Boolean)
       : [];
-    const termType = row.payment_term_type ?? "shotef_plus";
-    const termDays = row.payment_term_days ? Number(row.payment_term_days) : null;
-
-    const aliasesLiteral = `{${aliases.map((a) => `"${a.replace(/"/g, '\\"')}"`).join(",")}}`;
-    const { rows: r } = await sql`
-      INSERT INTO suppliers (name, aliases, payment_term_type, payment_term_days, notes)
-      VALUES (${row.name}, ${aliasesLiteral}::text[], ${termType}, ${termDays}, ${row.notes ?? null})
-      ON CONFLICT DO NOTHING
-      RETURNING *
-    `;
-    if (r[0]) inserted.push(r[0]);
+    await createSupplier({
+      name: row.name,
+      aliases,
+      payment_term_type:
+        (row.payment_term_type as "shotef_plus" | "shotef" | "immediate" | "custom") ??
+        "shotef_plus",
+      payment_term_days: row.payment_term_days ? Number(row.payment_term_days) : null,
+      notes: row.notes ?? null,
+    });
+    existingNames.add(row.name.toLowerCase());
+    inserted++;
   }
 
-  return NextResponse.json({ inserted: inserted.length });
+  return NextResponse.json({ inserted });
 }

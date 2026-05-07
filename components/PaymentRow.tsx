@@ -1,17 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, ExternalLink, Check, X } from "lucide-react";
+import { Pencil, Check, X } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface Payment {
-  id: number;
+  id: string;
   supplier_name: string;
   amount: number;
   currency: string;
   invoice_date: string | null;
   invoice_number: string | null;
-  image_url: string | null;
   calculated_due_date: string;
   overridden_due_date: string | null;
   override_reason: string | null;
@@ -85,12 +84,6 @@ export default function PaymentRow({
           </button>
         </td>
         <td className="px-4 py-3 flex items-center gap-2">
-          {payment.image_url && (
-            <a href={payment.image_url} target="_blank" rel="noopener noreferrer"
-              className="text-blue-500 hover:text-blue-700">
-              <ExternalLink size={14} />
-            </a>
-          )}
           <button onClick={() => setEditing(!editing)} className="text-slate-400 hover:text-slate-700">
             <Pencil size={14} />
           </button>
